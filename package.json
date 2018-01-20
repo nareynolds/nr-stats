@@ -1,0 +1,19 @@
+{
+  "name": "nr-stats",
+  "version": "0.0.0",
+  "description": "probability and statistics",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nareynolds/nr-stats.git"
+  },
+  "author": "Nathaniel A Reynolds",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/nareynolds/nr-stats/issues"
+  },
+  "homepage": "https://github.com/nareynolds/nr-stats#readme"
+}
