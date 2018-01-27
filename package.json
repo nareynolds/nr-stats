@@ -15,5 +15,8 @@
   "bugs": {
     "url": "https://github.com/nareynolds/nr-stats/issues"
   },
-  "homepage": "https://github.com/nareynolds/nr-stats#readme"
+  "homepage": "https://github.com/nareynolds/nr-stats#readme",
+  "dependencies": {
+    "lodash": "^4.17.4"
+  }
 }
