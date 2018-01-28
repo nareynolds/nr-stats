@@ -73,6 +73,23 @@ stats.Histogram = class {
     frequency(value) {
         return this.frequencyMap[value];
     }
+
+    get mode() {
+        // cache mode
+        if (!this._mode) {
+            let maxFreq = 0;
+            let mode;
+            _.forEach(this.values, value => {
+                const freq = this.frequencyMap[value];
+                if (freq > maxFreq) {
+                    maxFreq = freq;
+                    mode = value;
+                }
+            });
+            this._mode = { value: mode, frequency: maxFreq };
+        }
+        return this._mode;
+    }
 };
 
 /**
@@ -83,7 +100,7 @@ stats.Histogram = class {
 stats.histogram = function (values) {
     const hist = {};
     _.forEach(values, value => {
-        if (!value) hist[value] = 0;
+        if (!hist[value]) hist[value] = 0;
         hist[value] += 1;
     });
     return hist;
@@ -105,14 +122,39 @@ stats.mean = function (values) {
 };
 
 /**
+ * Compute median
+ * @param values
+ * @returns {*}
+ */
+stats.median = function (values) {
+    const sorted = _.sortBy(values);
+    const i = _.round(values.length / 2);
+
+    // if n is odd
+    if (values.length % 2) {
+        return sorted[i];
+    } else {
+        return (sorted[i] + sorted[i - 1]) / 2;
+    }
+};
+
+/**
  * Compute mode
  * @param values
  * @returns {number}
  */
 stats.mode = function (values) {
-    const max = _.max(values);
-    const hist = this.historgram(values);
-    return hist[_.toString(max)];
+    const hist = this.histogram(values);
+    let maxFreq = 0;
+    let mode;
+    _.forEach(values, value => {
+        const freq = hist[value];
+        if (freq > maxFreq) {
+            maxFreq = freq;
+            mode = value;
+        }
+    });
+    return { value: mode, frequency: maxFreq };
 };
 
 /**
@@ -166,7 +208,7 @@ stats.ProbabilityMassFunction = class {
         }
 
         // if values are a sampling of members the , the distribution will have a sample bias
-        if (options.familySizeBias) {
+        if (options && options.familySizeBias) {
             this.unbiasForFamilySize();
         }
     }
@@ -222,7 +264,7 @@ stats.ProbabilityMassFunction = class {
      * @returns {*}
      */
     probability(value) {
-        return this.probabilityMap(value);
+        return this.probabilityMap[value];
     }
 
     /**
@@ -310,4 +352,3 @@ stats.variance = function (values) {
  * @type {exports.variance|*}
  */
 stats.var = stats.variance;
-
