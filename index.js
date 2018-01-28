@@ -5,6 +5,145 @@ const _ = require('lodash');
 const stats = module.exports = {};
 
 /**
+ * Binary search for bin
+ * @param sortedValues - bin boundaries
+ * @param target - value to bin
+ * @returns {{indexes: [number,number], values: [number,number]}}
+ * @private
+ */
+stats._bin = function (sortedValues, target) {
+    // find bounding indexes
+    let lo, mid, hi;
+    if (target < sortedValues[0]) {
+        hi = 0;
+    } else if (target >= _.last(sortedValues)) {
+        lo = sortedValues.length - 1;
+    } else {
+        lo = 0;
+        hi = sortedValues.length - 1;
+        while (hi - lo > 1) {
+            mid = _.floor((lo + hi) / 2);
+            if (sortedValues[mid] <= target) {
+                lo = mid;
+            } else {
+                hi = mid;
+            }
+        }
+    }
+
+    // return boundary indexes and values
+    const loVal = _.isNil(lo) ? -Infinity : sortedValues[lo];
+    const hiVal = _.isNil(hi) ? Infinity : sortedValues[hi];
+    return {
+        indexes: [lo, hi],
+        values: [loVal, hiVal]
+    };
+};
+
+/**
+ * Cumulative Distribution Function class
+ * @description the probability of being greater than or equal to a value in a given set, p = CDF(x)
+ * @type {exports.CumulativeDistributionFunction}
+ */
+stats.CumulativeDistributionFunction = class {
+    /**
+     * Constructor
+     * @param [values]
+     * @param [probabilityMap]
+     */
+    constructor({ values, probabilityMap }) {
+        this.values = _.sortBy(values);
+        this.set = _.uniq(this.values);
+        this.probabilityMap = probabilityMap;
+
+        // compute probability map if not provided - normalize percentile rank
+        if (!this.probabilityMap) {
+            this.probabilityMap = {};
+            _.forEach(this.values, (value, idx) => {
+                this.probabilityMap[value] = (idx + 1) / this.values.length;
+            });
+        }
+    }
+
+    /**
+     * get interquartile range
+     * @returns {number}
+     */
+    get interquartileRange() {
+        // cache IQR
+        if (_.isNil(this._interquartileRange)) {
+            this._interquartileRange = this.percentile(75) - this.percentile(25);
+        }
+        return this._interquartileRange;
+    }
+
+    /**
+     * get median computed from CDF
+     * @returns {number}
+     */
+    get median() {
+        // cache median
+        if (_.isNil(this._median)) {
+            this._median = this.value(0.5);
+        }
+        return this._median;
+    }
+
+    /**
+     * get percentile for a given percentile rank
+     * @param percentileRank
+     * @returns {number}
+     */
+    percentile(percentileRank) {
+        const prob = percentileRank / 100;
+        return this.value(prob);
+    }
+
+    /**
+     * get percentile rank for a given value
+     * @param value
+     * @returns {number}
+     */
+    percentileRank(value) {
+        return this.probability(value) * 100;
+    }
+
+    /**
+     * get probability rank for a given value
+     * @param value
+     * @returns {number}
+     */
+    probability(value) {
+        const prob = this.probabilityMap[value];
+        if (prob) return prob;
+
+        // value is not explicitly in map, determine probability by its bin
+        const bin = stats._bin(this.set, value);
+
+        // 0 probability if value is less than the min,
+        if (_.isNil(bin.indexes[0])) return 0;
+
+        return this.probabilityMap[bin.values[0]];
+    }
+
+    /**
+     * get value for a given probability rank
+     * @param probability
+     * @returns {number}
+     */
+    value(probability) {
+        let value = _.findKey(this.probabilityMap, prob => prob === probability);
+        if (!value) {
+            // given probability is not explicitly in map, determine by its bin
+            const probabilities = _.map(this.probabilityMap);
+            const bin = stats._bin(probabilities, probability);
+            value = _.findKey(this.probabilityMap, prob => prob === bin.values[1]);
+        }
+        return _.toNumber(value);
+    }
+};
+
+/**
  * Compute effect size
  * @param values1
  * @param values2
@@ -52,8 +191,8 @@ stats.freq = stats.frequency;
 stats.Histogram = class {
     /**
      * Constructor
-     * @param values
-     * @param frequencyMap
+     * @param [values]
+     * @param [frequencyMap]
      */
     constructor({ values, frequencyMap }) {
         this.values = values;
@@ -68,19 +207,23 @@ stats.Histogram = class {
     /**
      * Get frequency for given value
      * @param value
-     * @returns {*}
+     * @returns {number}
      */
     frequency(value) {
         return this.frequencyMap[value];
     }
 
+    /**
+     * get mode
+     * @returns {{value: *, frequency: number}|*}
+     */
     get mode() {
         // cache mode
         if (!this._mode) {
             let maxFreq = 0;
             let mode;
-            _.forEach(this.values, value => {
-                const freq = this.frequencyMap[value];
+            _.forEach(this.frequencyMap, (freq, value) => {
+                value = _.toNumber(value);
                 if (freq > maxFreq) {
                     maxFreq = freq;
                     mode = value;
@@ -124,7 +267,7 @@ stats.mean = function (values) {
 /**
  * Compute median
  * @param values
- * @returns {*}
+ * @returns {number}
  */
 stats.median = function (values) {
     const sorted = _.sortBy(values);
@@ -140,6 +283,7 @@ stats.median = function (values) {
 
 /**
  * Compute mode
+ * @description most frequent value in a set
  * @param values
  * @returns {number}
  */
@@ -159,6 +303,7 @@ stats.mode = function (values) {
 
 /**
  * Compute percentile rank
+ * @description the percentage of values that are LTE the target
  * @param values
  * @param target
  * @returns {number}
@@ -173,25 +318,26 @@ stats.percentileRank = function (values, target) {
 
 /**
  * Compute percentile
+ * @description the value in the given set with the given percentile rank
  * @param values
  * @param percentileRank
  * @returns {number}
  */
 stats.percentile = function (values, percentileRank) {
-    values = _.sort(values);
-    const index = percentileRank * (values.length - 1);
-    return values[index];
+    values = _.sortBy(values);
+    const idx = (percentileRank * values.length / 100) - 1;
+    return values[idx];
 };
 
 /**
- * Probability mass function class
+ * Probability Mass Function class
  * @type {exports.ProbabilityMassFunction}
  */
 stats.ProbabilityMassFunction = class {
     /**
      * Constructor
-     * @param values
-     * @param probabilityMap
+     * @param [values]
+     * @param [probabilityMap]
      * @param options
      */
     constructor({ values, probabilityMap }, options) {
@@ -224,23 +370,18 @@ stats.ProbabilityMassFunction = class {
     }
 
     /**
-     * Get mean
+     * Get mean computed from PMF
      * @returns {number}
      */
     get mean() {
         // cache mean
         if (_.isNil(this._mean)) {
-            if (this.values) {
-                // compute from values if provided
-                this._mean = stats.mean(this.values);
-            } else {
-                // compute from probability distribution
-                let mean = 0;
-                _.forEach(this.probabilityMap, (prob, value) => {
-                    mean += prob * value;
-                });
-                this._mean = mean;
-            }
+            // compute from probability distribution
+            let mean = 0;
+            _.forEach(this.probabilityMap, (prob, value) => {
+                mean += prob * value;
+            });
+            this._mean = mean;
         }
         return this._mean;
     }
@@ -253,34 +394,29 @@ stats.ProbabilityMassFunction = class {
         _.forEach(this.probabilityMap, prob => {
             total += prob;
         });
-        _.forEach(this.probabilityMap, (prob, key) => {
-            this.probabilityMap[key] = prob / total;
+        _.forEach(this.probabilityMap, (prob, value) => {
+            this.probabilityMap[value] = prob / total;
         });
     }
 
     /**
      * Get probability for given value
      * @param value
-     * @returns {*}
+     * @returns {number}
      */
     probability(value) {
         return this.probabilityMap[value];
     }
 
     /**
-     * Get standard deviation
+     * Get standard deviation computed from PMF
      * @returns {number}
      */
     get standardDeviation() {
         // cache stdev
         if (_.isNil(this._standardDeviation)) {
-            if (this.values) {
-                // compute from values if provided
-                this._standardDeviation = stats.standardDeviation(this.values);
-            } else {
-                // compute from probability distribution
-                this._standardDeviation = Math.sqrt(this.variance);
-            }
+            // compute from probability distribution
+            this._standardDeviation = Math.sqrt(this.variance);
         }
         return this._standardDeviation;
     }
@@ -296,23 +432,18 @@ stats.ProbabilityMassFunction = class {
     }
 
     /**
-     * Get variance
+     * Get variance computed from PMF
      * @returns {number}
      */
     get variance() {
         // cache variance
         if (_.isNil(this._variance)) {
-            if (this.values) {
-                // compute from values if provided
-                this._variance = stats.variance(this.values);
-            } else {
-                // compute from probability distribution
-                let variance = 0;
-                _.forEach(this.probabilityMap, (prob, value) => {
-                    variance += prob * Math.pow((value - this.mean), 2);
-                });
-                this._variance = variance;
-            }
+            // compute from probability distribution
+            let variance = 0;
+            _.forEach(this.probabilityMap, (prob, value) => {
+                variance += prob * Math.pow((value - this.mean), 2);
+            });
+            this._variance = variance;
         }
         return this._variance;
     }
