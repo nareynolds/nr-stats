@@ -41,25 +41,25 @@ stats._bin = function (sortedValues, target) {
 };
 
 /**
- * Cumulative Distribution Function class
+ * Cumulative Mass Function (a.k.a. Cumulative Distribution Function) class
  * @description the probability of being greater than or equal to a value in a given set, p = CDF(x)
- * @type {exports.CumulativeDistributionFunction}
+ * @type {exports.CumulativeMassFunction}
  */
-stats.CumulativeDistributionFunction = class {
+stats.CumulativeMassFunction = class {
     /**
      * Constructor
-     * @param [values]
      * @param [probabilityMap]
+     * @param [values]
      */
-    constructor({ values, probabilityMap }) {
+    constructor({ probabilityMap, values }) {
+        this.probabilityMap = probabilityMap;
         this.values = _.sortBy(values);
         this.set = _.uniq(this.values);
-        this.probabilityMap = probabilityMap;
 
         // compute probability map if not provided - normalize percentile rank
         if (!this.probabilityMap) {
             this.probabilityMap = {};
-            _.forEach(this.values, (value, idx) => {
+            _(this.values).sortBy().forEach((value, idx) => {
                 this.probabilityMap[value] = (idx + 1) / this.values.length;
             });
         }
@@ -127,6 +127,22 @@ stats.CumulativeDistributionFunction = class {
     }
 
     /**
+     * Generate PMF from this CMF by computing its derivative
+     * @returns {ProbabilityMassFunction}
+     */
+    toProbabilityMassFunction() {
+        const probabilityMap = {};
+        let prevProb = 0;
+        let diff;
+        _.forEach(this.probabilityMap, (prob, value) => {
+            diff = _.round(prob - prevProb, 15); // to prevent binary computation inaccuracies
+            probabilityMap[value] = diff;
+            prevProb = prob;
+        });
+        return new stats.ProbabilityMassFunction({ probabilityMap, values: this.values });
+    }
+
+    /**
      * get value for a given probability rank
      * @param probability
      * @returns {number}
@@ -184,6 +200,8 @@ stats.frequency = function (values, target) {
  */
 stats.freq = stats.frequency;
 
+// TODO: GaussianDistribution
+
 /**
  * Histogram class
  * @type {exports.Histogram}
@@ -191,12 +209,12 @@ stats.freq = stats.frequency;
 stats.Histogram = class {
     /**
      * Constructor
-     * @param [values]
      * @param [frequencyMap]
+     * @param [values]
      */
-    constructor({ values, frequencyMap }) {
-        this.values = values;
+    constructor({ frequencyMap, values }) {
         this.frequencyMap = frequencyMap;
+        this.values = values;
 
         // compute frequency map if not provided
         if (!this.frequencyMap) {
@@ -241,6 +259,7 @@ stats.Histogram = class {
  * @returns {object}
  */
 stats.histogram = function (values) {
+    values = _.sortBy(values);
     const hist = {};
     _.forEach(values, value => {
         if (!hist[value]) hist[value] = 0;
@@ -301,6 +320,10 @@ stats.mode = function (values) {
     return { value: mode, frequency: maxFreq };
 };
 
+// TODO: rawMoment(values) and centralMoment(values)
+
+// TODO: ParetoDistribution class
+
 /**
  * Compute percentile rank
  * @description the percentage of values that are LTE the target
@@ -336,17 +359,17 @@ stats.percentile = function (values, percentileRank) {
 stats.ProbabilityMassFunction = class {
     /**
      * Constructor
-     * @param [values]
      * @param [probabilityMap]
+     * @param [values]
      * @param options
      */
-    constructor({ values, probabilityMap }, options) {
-        this.values = values;
+    constructor({ probabilityMap, values }, options) {
         this.probabilityMap = probabilityMap;
+        this.values = values;
 
         // compute probability map if not provided
         if (!this.probabilityMap) {
-            const histogram = new stats.Histogram({ values });
+            const histogram = new stats.Histogram({ values: this.values });
             this.probabilityMap = {};
             _.forEach(histogram.frequencyMap, (freq, value) => {
                 this.probabilityMap[value] = freq / this.values.length;
@@ -422,6 +445,20 @@ stats.ProbabilityMassFunction = class {
     }
 
     /**
+     * Generate CMF from this PMF by computing its integral
+     * @returns {CumulativeMassFunction}
+     */
+    toCumulativeMassFunction() {
+        const probabilityMap = {};
+        let sum = 0;
+        _.forEach(this.probabilityMap, (prob, value) => {
+            sum = _.round(sum + prob, 15); // to prevent binary computation inaccuracies
+            probabilityMap[value] = sum;
+        });
+        return new stats.CumulativeMassFunction({ probabilityMap, values: this.values });
+    }
+
+    /**
      * Estimate true distribution assuming a family-size bias
      */
     unbiasForFamilySize() {
@@ -447,6 +484,17 @@ stats.ProbabilityMassFunction = class {
         }
         return this._variance;
     }
+};
+
+/**
+ * Generates a random number between the inclusive lower and upper bounds
+ * @param lower
+ * @param upper
+ * @param floating
+ * @returns {number}
+ */
+stats.random = function (lower, upper, floating) {
+    return _.random(lower, upper, floating);
 };
 
 /**
