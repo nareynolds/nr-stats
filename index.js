@@ -6,24 +6,24 @@ const stats = module.exports = {};
 
 /**
  * Binary search for bin
- * @param sortedValues - bin boundaries
- * @param target - value to bin
+ * @param sortedBins - bin boundaries [n, n+1)
+ * @param value - value to bin
  * @returns {{indexes: [number,number], values: [number,number]}}
  * @private
  */
-stats._bin = function (sortedValues, target) {
+stats._bin = function (sortedBins, value) {
     // find bounding indexes
     let lo, mid, hi;
-    if (target < sortedValues[0]) {
+    if (value < sortedBins[0]) {
         hi = 0;
-    } else if (target >= _.last(sortedValues)) {
-        lo = sortedValues.length - 1;
+    } else if (value >= _.last(sortedBins)) {
+        lo = sortedBins.length - 1;
     } else {
         lo = 0;
-        hi = sortedValues.length - 1;
+        hi = sortedBins.length - 1;
         while (hi - lo > 1) {
             mid = _.floor((lo + hi) / 2);
-            if (sortedValues[mid] <= target) {
+            if (sortedBins[mid] <= value) {
                 lo = mid;
             } else {
                 hi = mid;
@@ -32,8 +32,8 @@ stats._bin = function (sortedValues, target) {
     }
 
     // return boundary indexes and values
-    const loVal = _.isNil(lo) ? -Infinity : sortedValues[lo];
-    const hiVal = _.isNil(hi) ? Infinity : sortedValues[hi];
+    const loVal = _.isNil(lo) ? -Infinity : sortedBins[lo];
+    const hiVal = _.isNil(hi) ? Infinity : sortedBins[hi];
     return {
         indexes: [lo, hi],
         values: [loVal, hiVal]
