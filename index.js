@@ -41,6 +41,17 @@ stats._bin = function (sortedValues, target) {
 };
 
 /**
+ * Compute moment about the mean
+ * @param values
+ * @param ordinal
+ * @returns {number}
+ */
+stats.centralMoment = function (values, ordinal) {
+    const mean = this.mean(values);
+    return this.moment(values, ordinal, mean);
+};
+
+/**
  * Cumulative Mass Function (a.k.a. Cumulative Distribution Function) class
  * @description the probability of being greater than or equal to a value in a given set, p = CDF(x)
  * @type {exports.CumulativeMassFunction}
@@ -280,7 +291,7 @@ stats.hist = stats.histogram;
  * @returns {number}
  */
 stats.mean = function (values) {
-    return _.mean(values);
+    return this.rawMoment(values);
 };
 
 /**
@@ -320,7 +331,20 @@ stats.mode = function (values) {
     return { value: mode, frequency: maxFreq };
 };
 
-// TODO: rawMoment(values) and centralMoment(values)
+/**
+ * Compute moment
+ * @param values
+ * @param ordinal
+ * @param axis
+ * @returns {number}
+ */
+stats.moment = function (values, ordinal = 1, axis = 0) {
+    let sum = 0;
+    _.forEach(values, value => {
+        sum += Math.pow((value - axis), ordinal);
+    });
+    return sum / values.length;
+};
 
 // TODO: ParetoDistribution class
 
@@ -350,6 +374,19 @@ stats.percentile = function (values, percentileRank) {
     values = _.sortBy(values);
     const idx = (percentileRank * values.length / 100) - 1;
     return values[idx];
+};
+
+/**
+ * Compute Pearson Median Skewness
+ * @description a robust skewness statistic (less susceptible to outliers)
+ * @param values
+ * @returns {number}
+ */
+stats.pearsonMedianSkewness = function (values) {
+    const mean = this.mean(values);
+    const median = this.median(values);
+    const stdev = this.standardDeviation(values);
+    return 3 * (mean - median) / stdev;
 };
 
 /**
@@ -498,6 +535,26 @@ stats.random = function (lower, upper, floating) {
 };
 
 /**
+ * Compute moment about the origin
+ * @param values
+ * @param ordinal
+ * @returns {number}
+ */
+stats.rawMoment = function (values, ordinal) {
+    return this.moment(values, ordinal);
+};
+
+/**
+ * Compute skewness
+ * @description 3rd standardized moment, negative = skews left, positive = skews right
+ * @param values
+ * @returns {number}
+ */
+stats.skewness = function (values) {
+    return this.standardizedMoment(values, 3);
+};
+
+/**
  * Compute standard deviation
  * @param values
  * @returns {number}
@@ -513,17 +570,24 @@ stats.standardDeviation = function (values) {
 stats.stdev = stats.standardDeviation;
 
 /**
+ * Compute standardized moment
+ * @description central moment that has been normalize so it has no units
+ * @param values
+ * @param ordinal
+ * @returns {number}
+ */
+stats.standardizedMoment = function (values, ordinal) {
+    const stdev = this.standardDeviation(values);
+    return this.centralMoment(values, ordinal) / Math.pow(stdev, ordinal);
+};
+
+/**
  * Compute variance
  * @param values
  * @returns {number}
  */
 stats.variance = function (values) {
-    const mean = this.mean(values);
-    let x = 0;
-    _.forEach(values, value => {
-        x += Math.pow((value - mean), 2);
-    });
-    return x / values.length;
+    return this.centralMoment(values, 2);
 };
 
 /**

@@ -70,6 +70,8 @@ test('percentile', t => {
     t.equal(percentile, 77);
 });
 
+// TODO: pearsonMedianSkewness
+
 test('ProbabilityMassFunction', t => {
     t.plan(5);
     const pmf = new stats.ProbabilityMassFunction({ values: data });
